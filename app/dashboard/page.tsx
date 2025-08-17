@@ -78,7 +78,7 @@ interface BatchUpload {
   createdAt: string
 }
 
-function DashboardContent() {
+export default function DashboardContent() {
   const [selectedImages, setSelectedImages] = useState<File[]>([])
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [currentResults, setCurrentResults] = useState<GradingResult[]>([])
