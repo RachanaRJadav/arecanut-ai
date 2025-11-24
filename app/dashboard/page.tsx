@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useRef, useCallback } from "react"
+import { useState, useRef, useCallback, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -10,33 +10,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import {
-  Upload,
-  Camera,
-  BarChart3,
-  History,
-  CheckCircle,
-  TrendingUp,
-  Download,
-  Eye,
-  LogOut,
-  Calendar,
-  Filter,
-  ArrowUpRight,
-  X,
-  Plus,
-  Trash2,
-  Star,
-  Lightbulb,
-  Target,
-  Zap,
-  Users,
-  Bell,
-  Settings,
-  RefreshCw,
-} from "lucide-react"
+import { Upload, Camera, BarChart3, History, CheckCircle, TrendingUp, Download, Eye, LogOut, Calendar, Filter, ArrowUpRight, X, Plus, Trash2, Star, Lightbulb, Target, Zap, Users, Bell, Settings, RefreshCw } from 'lucide-react'
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { AuthGuard } from "@/components/ui/auth-guard"
+import { useRouter } from 'next/navigation'
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import {
   LineChart,
@@ -54,13 +31,13 @@ import {
 } from "recharts"
 
 interface GradingResult {
-  id: string
+  _id?: string
   grade: "Premium" | "Grade A" | "Grade B" | "Grade C"
   confidence: number
   defects: string[]
   size: string
   color: string
-  timestamp: string
+  createdAt: string
   imageUrl: string
   marketPrice: number
   recommendations: string[]
@@ -78,7 +55,7 @@ interface BatchUpload {
   createdAt: string
 }
 
-export default function DashboardContent() {
+function DashboardContent() {
   const [selectedImages, setSelectedImages] = useState<File[]>([])
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [currentResults, setCurrentResults] = useState<GradingResult[]>([])
@@ -88,76 +65,62 @@ export default function DashboardContent() {
   const [showCamera, setShowCamera] = useState(false)
   const [location, setLocation] = useState("")
   const [notes, setNotes] = useState("")
+  const [userId, setUserId] = useState<string>("")
+  const [analytics, setAnalytics] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string>("")
   const fileInputRef = useRef<HTMLInputElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const router = useRouter()
 
-  const recentResults: GradingResult[] = [
-    {
-      id: "1",
-      grade: "Premium",
-      confidence: 98.5,
-      defects: [],
-      size: "Large (18-20mm)",
-      color: "Golden Brown",
-      timestamp: "2024-01-15 14:30",
-      imageUrl: "/premium-arecanut.png",
-      marketPrice: 450,
-      recommendations: ["Maintain current drying process", "Store in moisture-controlled environment"],
-      qualityScore: 9.8,
-      moistureContent: 12.5,
-      location: "Mangalore Farm Block A",
-      batchId: "MNG-2024-001",
-    },
-    {
-      id: "2",
-      grade: "Grade A",
-      confidence: 94.2,
-      defects: ["Minor surface marks"],
-      size: "Medium (16-18mm)",
-      color: "Light Brown",
-      timestamp: "2024-01-15 13:15",
-      imageUrl: "/grade-a-arecanut.png",
-      marketPrice: 380,
-      recommendations: ["Improve sorting process", "Check drying temperature"],
-      qualityScore: 8.4,
-      moistureContent: 13.2,
-      location: "Mangalore Farm Block B",
-      batchId: "MNG-2024-002",
-    },
-    {
-      id: "3",
-      grade: "Grade B",
-      confidence: 91.8,
-      defects: ["Slight discoloration", "Small cracks"],
-      size: "Medium (16-18mm)",
-      color: "Brown",
-      timestamp: "2024-01-15 12:00",
-      imageUrl: "/grade-b-arecanut.png",
-      marketPrice: 320,
-      recommendations: ["Review harvesting timing", "Adjust drying conditions", "Consider pest management"],
-      qualityScore: 7.2,
-      moistureContent: 14.1,
-      location: "Mangalore Farm Block C",
-      batchId: "MNG-2024-003",
-    },
-  ]
+  useEffect(() => {
+    const storedUserId = localStorage.getItem("userId")
+    if (storedUserId) {
+      setUserId(storedUserId)
+      fetchAnalytics(storedUserId)
+    }
+    setLoading(false)
+  }, [])
 
-  const monthlyTrends = [
-    { month: "Aug", premium: 28, gradeA: 45, gradeB: 20, gradeC: 7, avgPrice: 365, volume: 1200, predicted: 370 },
-    { month: "Sep", premium: 31, gradeA: 42, gradeB: 19, gradeC: 8, avgPrice: 375, volume: 1350, predicted: 380 },
-    { month: "Oct", premium: 29, gradeA: 44, gradeB: 21, gradeC: 6, avgPrice: 370, volume: 1180, predicted: 375 },
-    { month: "Nov", premium: 33, gradeA: 41, gradeB: 18, gradeC: 8, avgPrice: 385, volume: 1420, predicted: 390 },
-    { month: "Dec", premium: 36, gradeA: 39, gradeB: 17, gradeC: 8, avgPrice: 395, volume: 1580, predicted: 400 },
-    { month: "Jan", premium: 34, gradeA: 42, gradeB: 18, gradeC: 6, avgPrice: 385, volume: 1340, predicted: 395 },
-  ]
+  const fetchAnalytics = async (uid: string) => {
+    try {
+      const response = await fetch(`/api/grading/analytics?userId=${uid}`)
+      const data = await response.json()
+      if (data.success) {
+        setAnalytics(data.analytics)
+      }
+    } catch (error) {
+      console.error("[v0] Error fetching analytics:", error)
+    }
+  }
 
+  const [recentResults, setRecentResults] = useState<GradingResult[]>([])
+
+  useEffect(() => {
+    if (userId) {
+      fetchRecentGradings(userId)
+    }
+  }, [userId])
+
+  const fetchRecentGradings = async (uid: string) => {
+    try {
+      const response = await fetch(`/api/grading/history?userId=${uid}&limit=10`)
+      const data = await response.json()
+      if (data.success) {
+        setRecentResults(data.history)
+      }
+    } catch (error) {
+      console.error("[v0] Error fetching recent results:", error)
+    }
+  }
+
+  const monthlyTrends = analytics?.monthlyTrends || []
   const qualityDistribution = [
-    { name: "Premium", value: 34, color: "#22c55e" },
-    { name: "Grade A", value: 42, color: "#3b82f6" },
-    { name: "Grade B", value: 18, color: "#eab308" },
-    { name: "Grade C", value: 6, color: "#f97316" },
+    { name: "Premium", value: analytics?.gradeDistribution?.Premium || 0, color: "#22c55e" },
+    { name: "Grade A", value: analytics?.gradeDistribution?.GradeA || 0, color: "#3b82f6" },
+    { name: "Grade B", value: analytics?.gradeDistribution?.GradeB || 0, color: "#eab308" },
+    { name: "Grade C", value: analytics?.gradeDistribution?.GradeC || 0, color: "#f97316" },
   ]
 
   const priceComparison = [
@@ -207,61 +170,64 @@ export default function DashboardContent() {
   }
 
   const handleAnalyze = async () => {
-    if (selectedImages.length === 0) return
+    if (selectedImages.length === 0 || !userId) return
 
     setIsAnalyzing(true)
     setAnalysisProgress(0)
     setCurrentResults([])
+    setError("")
 
     const batchId = `BATCH-${Date.now()}`
-    const newBatch: BatchUpload = {
-      id: batchId,
-      images: selectedImages,
-      status: "processing",
-      results: [],
-      createdAt: new Date().toISOString(),
-    }
 
-    setBatchUploads((prev) => [newBatch, ...prev])
+    try {
+      const formData = new FormData()
+      selectedImages.forEach((file) => formData.append("files", file))
+      formData.append("userId", userId)
+      formData.append("batchId", batchId)
+      formData.append("location", location)
+      formData.append("notes", notes)
 
-    // Simulate progressive analysis
-    for (let i = 0; i < selectedImages.length; i++) {
-      const progress = ((i + 1) / selectedImages.length) * 100
-      setAnalysisProgress(progress)
+      // Simulate progress
+      const progressInterval = setInterval(() => {
+        setAnalysisProgress((prev) => Math.min(prev + 15, 90))
+      }, 300)
 
-      await new Promise((resolve) => setTimeout(resolve, 2000))
+      const response = await fetch("/api/grading/analyze", {
+        method: "POST",
+        body: formData,
+      })
 
-      const mockResult: GradingResult = {
-        id: `${Date.now()}-${i}`,
-        grade: ["Premium", "Grade A", "Grade B", "Grade C"][Math.floor(Math.random() * 4)] as any,
-        confidence: 90 + Math.random() * 10,
-        defects: Math.random() > 0.7 ? ["Minor surface marks"] : [],
-        size: ["Large (18-20mm)", "Medium (16-18mm)", "Small (14-16mm)"][Math.floor(Math.random() * 3)],
-        color: ["Golden Brown", "Light Brown", "Brown"][Math.floor(Math.random() * 3)],
-        timestamp: new Date().toLocaleString(),
-        imageUrl: URL.createObjectURL(selectedImages[i]),
-        marketPrice: 300 + Math.random() * 200,
-        recommendations: [
-          "Maintain current drying process",
-          "Store in moisture-controlled environment",
-          "Consider sorting improvements",
-        ],
-        qualityScore: 7 + Math.random() * 3,
-        moistureContent: 12 + Math.random() * 3,
-        location: location || "Current Location",
-        batchId: batchId,
+      clearInterval(progressInterval)
+
+      const data = await response.json()
+
+      if (data.success) {
+        setCurrentResults(data.results)
+        setAnalysisProgress(100)
+
+        const newBatch: BatchUpload = {
+          id: batchId,
+          images: selectedImages,
+          status: "completed",
+          results: data.results,
+          createdAt: new Date().toISOString(),
+        }
+
+        setBatchUploads((prev) => [newBatch, ...prev])
+        setSelectedImages([])
+        setLocation("")
+        setNotes("")
+        fetchAnalytics(userId)
+        fetchRecentGradings(userId)
+      } else {
+        setError(data.message || "Analysis failed. Please try again.")
       }
-
-      setCurrentResults((prev) => [...prev, mockResult])
+    } catch (error) {
+      console.error("[v0] Analysis error:", error)
+      setError("Error analyzing images. Please check your network connection.")
+    } finally {
+      setIsAnalyzing(false)
     }
-
-    // Update batch status
-    setBatchUploads((prev) =>
-      prev.map((batch) => (batch.id === batchId ? { ...batch, status: "completed", results: currentResults } : batch)),
-    )
-
-    setIsAnalyzing(false)
-    setAnalysisProgress(100)
   }
 
   const startCamera = async () => {
@@ -275,6 +241,7 @@ export default function DashboardContent() {
       }
     } catch (error) {
       console.error("Error accessing camera:", error)
+      setError("Could not access camera. Please grant camera permissions.")
     }
   }
 
@@ -309,6 +276,7 @@ export default function DashboardContent() {
 
   const handleLogout = () => {
     localStorage.removeItem("isAuthenticated")
+    localStorage.removeItem("userId")
     localStorage.removeItem("userEmail")
     localStorage.removeItem("userName")
     router.push("/")
@@ -330,32 +298,46 @@ export default function DashboardContent() {
   }
 
   const exportResults = () => {
+    if (currentResults.length === 0) return
+
     const data = currentResults.map((result) => ({
       Grade: result.grade,
       Confidence: `${result.confidence}%`,
       Size: result.size,
       Color: result.color,
       "Market Price": `₹${result.marketPrice}/kg`,
-      "Quality Score": result.qualityScore,
+      "Quality Score": result.qualityScore.toFixed(1),
       "Moisture Content": `${result.moistureContent}%`,
-      Location: result.location,
-      Timestamp: result.timestamp,
+      Location: result.location || "N/A",
+      Timestamp: result.createdAt,
       Recommendations: result.recommendations.join("; "),
     }))
 
-    const csv = [Object.keys(data[0]).join(","), ...data.map((row) => Object.values(row).join(","))].join("\n")
+    const header = Object.keys(data[0]).join(",")
+    const rows = data.map((row) => Object.values(row).map(v => `"${v}"`).join(","))
+    const csvContent = [header, ...rows].join("\n")
 
-    const blob = new Blob([csv], { type: "text/csv" })
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
     const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `arecanut-grading-${new Date().toISOString().split("T")[0]}.csv`
-    a.click()
+    const link = document.createElement("a")
+    link.setAttribute("href", url)
+    link.setAttribute("download", `arecanut-grading-${new Date().toISOString().split("T")[0]}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    )
   }
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Enhanced Header */}
+      {/* ... existing header ... */}
       <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -367,7 +349,7 @@ export default function DashboardContent() {
             </Link>
             <Badge variant="secondary" className="ml-2">
               <Zap className="w-3 h-3 mr-1" />
-              Enhanced
+              Pro
             </Badge>
           </div>
           <nav className="flex items-center gap-2">
@@ -390,7 +372,7 @@ export default function DashboardContent() {
       </header>
 
       <div className="container mx-auto px-4 py-8">
-        {/* Enhanced Header Section */}
+        {/* ... existing code up to tabs ... */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
             <div>
@@ -402,7 +384,7 @@ export default function DashboardContent() {
                 <CheckCircle className="w-3 h-3 mr-1" />
                 System Online
               </Badge>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" onClick={() => userId && fetchAnalytics(userId)}>
                 <RefreshCw className="w-4 h-4 mr-2" />
                 Sync
               </Button>
@@ -414,30 +396,38 @@ export default function DashboardContent() {
             <Card className="p-4">
               <div className="flex items-center gap-2">
                 <Target className="w-4 h-4 text-primary" />
-                <span className="text-sm font-medium">Today's Scans</span>
+                <span className="text-sm font-medium">Total Scans</span>
               </div>
-              <p className="text-2xl font-bold text-foreground mt-1">24</p>
+              <p className="text-2xl font-bold text-foreground mt-1">
+                {analytics?.totalSamples ? analytics.totalSamples.toLocaleString() : "0"}
+              </p>
             </Card>
             <Card className="p-4">
               <div className="flex items-center gap-2">
                 <Star className="w-4 h-4 text-yellow-500" />
                 <span className="text-sm font-medium">Avg Quality</span>
               </div>
-              <p className="text-2xl font-bold text-foreground mt-1">8.7/10</p>
+              <p className="text-2xl font-bold text-foreground mt-1">
+                {analytics?.averageQualityScore !== undefined ? analytics.averageQualityScore.toFixed(1) : "N/A"}/10
+              </p>
             </Card>
             <Card className="p-4">
               <div className="flex items-center gap-2">
                 <TrendingUp className="w-4 h-4 text-green-500" />
                 <span className="text-sm font-medium">Premium %</span>
               </div>
-              <p className="text-2xl font-bold text-foreground mt-1">34%</p>
+              <p className="text-2xl font-bold text-foreground mt-1">
+                {analytics?.premiumPercentage !== undefined ? analytics.premiumPercentage.toFixed(1) : "0"}%
+              </p>
             </Card>
             <Card className="p-4">
               <div className="flex items-center gap-2">
                 <Users className="w-4 h-4 text-blue-500" />
                 <span className="text-sm font-medium">Market Price</span>
               </div>
-              <p className="text-2xl font-bold text-foreground mt-1">₹385</p>
+              <p className="text-2xl font-bold text-foreground mt-1">
+                ₹{analytics?.averagePrice !== undefined ? analytics.averagePrice.toFixed(0) : "0"}
+              </p>
             </Card>
           </div>
         </div>
@@ -450,7 +440,6 @@ export default function DashboardContent() {
           </TabsList>
 
           <TabsContent value="grade" className="space-y-6">
-            {/* Enhanced Upload Section */}
             <div className="grid lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2 space-y-6">
                 <Card>
@@ -464,7 +453,12 @@ export default function DashboardContent() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    {/* Enhanced Upload Area */}
+                    {error && (
+                      <Alert variant="destructive">
+                        <AlertDescription>{error}</AlertDescription>
+                      </Alert>
+                    )}
+
                     <div
                       className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
                         dragActive ? "border-primary bg-primary/5" : "border-border"
@@ -520,7 +514,6 @@ export default function DashboardContent() {
                       />
                     </div>
 
-                    {/* Camera and Action Buttons */}
                     <div className="flex gap-2">
                       <Button variant="outline" onClick={startCamera} className="flex-1 bg-transparent">
                         <Camera className="w-4 h-4 mr-2" />
@@ -539,7 +532,6 @@ export default function DashboardContent() {
                       </Button>
                     </div>
 
-                    {/* Additional Info Fields */}
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="location">Location/Block</Label>
@@ -592,7 +584,6 @@ export default function DashboardContent() {
                   </CardContent>
                 </Card>
 
-                {/* Camera Modal */}
                 {showCamera && (
                   <Card className="fixed inset-4 z-50 bg-background">
                     <CardHeader>
@@ -620,7 +611,6 @@ export default function DashboardContent() {
                 )}
               </div>
 
-              {/* Enhanced Results Panel */}
               <div className="space-y-6">
                 <Card>
                   <CardHeader>
@@ -636,17 +626,15 @@ export default function DashboardContent() {
                   </CardHeader>
                   <CardContent>
                     {isAnalyzing ? (
-                      <div className="space-y-4">
-                        <div className="text-center py-8">
-                          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-                          <p className="text-foreground font-medium">Analyzing batch...</p>
-                          <p className="text-sm text-muted-foreground">Processing {selectedImages.length} images</p>
-                        </div>
+                      <div className="text-center py-8">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+                        <p className="text-foreground font-medium">Analyzing batch...</p>
+                        <p className="text-sm text-muted-foreground">Processing {selectedImages.length} images</p>
                       </div>
                     ) : currentResults.length > 0 ? (
                       <div className="space-y-4 max-h-96 overflow-y-auto">
                         {currentResults.map((result, index) => (
-                          <div key={result.id} className="border border-border rounded-lg p-4 space-y-3">
+                          <div key={result._id || index} className="border border-border rounded-lg p-4 space-y-3">
                             <div className="flex items-center justify-between">
                               <Badge className={`${getGradeColor(result.grade)}`}>{result.grade}</Badge>
                               <span className="text-sm text-muted-foreground">
@@ -700,7 +688,6 @@ export default function DashboardContent() {
                   </CardContent>
                 </Card>
 
-                {/* Quick Insights */}
                 {currentResults.length > 0 && (
                   <Card>
                     <CardHeader>
@@ -747,76 +734,68 @@ export default function DashboardContent() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <History className="w-5 h-5" />
-                  Recent Gradings & Batches
+                  Recent Gradings
                 </CardTitle>
-                <CardDescription>View your previous quality assessments and batch processing history</CardDescription>
+                <CardDescription>View your previous quality assessments</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {recentResults.map((result) => (
-                    <div
-                      key={result.id}
-                      className="flex items-center gap-4 p-4 border border-border rounded-lg hover:bg-muted/50 transition-colors"
-                    >
-                      <img
-                        src={result.imageUrl || "/placeholder.svg"}
-                        alt="Arecanut sample"
-                        className="w-16 h-16 object-cover rounded-lg"
-                      />
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Badge className={`${getGradeColor(result.grade)} text-xs`}>{result.grade}</Badge>
-                          <span className="text-sm text-muted-foreground">{result.confidence}% confidence</span>
+                  {recentResults.length > 0 ? (
+                    recentResults.map((result) => (
+                      <div
+                        key={result._id}
+                        className="flex items-center gap-4 p-4 border border-border rounded-lg hover:bg-muted/50 transition-colors"
+                      >
+                        <img
+                          src={result.imageUrl || "/placeholder.svg"}
+                          alt="Arecanut sample"
+                          className="w-16 h-16 object-cover rounded-lg"
+                        />
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Badge className={`${getGradeColor(result.grade)} text-xs`}>{result.grade}</Badge>
+                            <span className="text-sm text-muted-foreground">{result.confidence}% confidence</span>
+                          </div>
+                          <p className="text-sm text-foreground font-medium">
+                            {result.size} • {result.color}
+                          </p>
+                          <p className="text-xs text-muted-foreground">{result.createdAt}</p>
                         </div>
-                        <p className="text-sm text-foreground font-medium">
-                          {result.size} • {result.color}
-                        </p>
-                        <p className="text-xs text-muted-foreground">{result.timestamp}</p>
+                        <div className="text-right">
+                          <p className="font-semibold text-primary">₹{result.marketPrice}/kg</p>
+                          <Button variant="ghost" size="sm">
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <p className="font-semibold text-primary">₹{result.marketPrice}/kg</p>
-                        <Button variant="ghost" size="sm">
-                          <Eye className="w-4 h-4" />
-                        </Button>
-                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <History className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                      <p>No gradings yet. Start by uploading images above.</p>
                     </div>
-                  ))}
+                  )}
                 </div>
               </CardContent>
             </Card>
           </TabsContent>
 
           <TabsContent value="analytics" className="space-y-6">
-            {/* Analytics Header */}
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-2xl font-bold text-foreground">Analytics Overview</h2>
                 <p className="text-muted-foreground">Comprehensive insights into your Arecanut quality trends</p>
               </div>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm">
-                  <Calendar className="w-4 h-4 mr-2" />
-                  Last 6 Months
-                </Button>
-                <Button variant="outline" size="sm">
-                  <Filter className="w-4 h-4 mr-2" />
-                  Filter
-                </Button>
-              </div>
             </div>
 
-            {/* Key Metrics */}
             <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium text-muted-foreground">Total Samples</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-foreground">1,247</div>
-                  <div className="flex items-center gap-1 text-xs">
-                    <ArrowUpRight className="w-3 h-3 text-green-600" />
-                    <span className="text-green-600">+12%</span>
-                    <span className="text-muted-foreground">from last month</span>
+                  <div className="text-2xl font-bold text-foreground">
+                    {analytics?.totalSamples?.toLocaleString() || "0"}
                   </div>
                 </CardContent>
               </Card>
@@ -826,11 +805,8 @@ export default function DashboardContent() {
                   <CardTitle className="text-sm font-medium text-muted-foreground">Premium Grade</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-foreground">34%</div>
-                  <div className="flex items-center gap-1 text-xs">
-                    <ArrowUpRight className="w-3 h-3 text-green-600" />
-                    <span className="text-green-600">+5%</span>
-                    <span className="text-muted-foreground">improvement</span>
+                  <div className="text-2xl font-bold text-foreground">
+                    {analytics?.premiumPercentage?.toFixed(1) || "0"}%
                   </div>
                 </CardContent>
               </Card>
@@ -840,11 +816,8 @@ export default function DashboardContent() {
                   <CardTitle className="text-sm font-medium text-muted-foreground">Avg. Price</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-foreground">₹385</div>
-                  <div className="flex items-center gap-1 text-xs">
-                    <ArrowUpRight className="w-3 h-3 text-green-600" />
-                    <span className="text-green-600">+8%</span>
-                    <span className="text-muted-foreground">per kg this month</span>
+                  <div className="text-2xl font-bold text-foreground">
+                    ₹{analytics?.averagePrice?.toFixed(0) || "0"}
                   </div>
                 </CardContent>
               </Card>
@@ -854,98 +827,91 @@ export default function DashboardContent() {
                   <CardTitle className="text-sm font-medium text-muted-foreground">Quality Score</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-foreground">8.7/10</div>
-                  <div className="flex items-center gap-1 text-xs">
-                    <ArrowUpRight className="w-3 h-3 text-green-600" />
-                    <span className="text-green-600">+0.3</span>
-                    <span className="text-muted-foreground">overall quality</span>
+                  <div className="text-2xl font-bold text-foreground">
+                    {analytics?.averageQualityScore?.toFixed(1) || "0"}/10
                   </div>
                 </CardContent>
               </Card>
             </div>
 
-            {/* Charts Row 1 */}
-            <div className="grid lg:grid-cols-2 gap-6">
-              {/* Quality Trends Chart */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Quality Trends Over Time</CardTitle>
-                  <CardDescription>Monthly breakdown of grade distribution</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ChartContainer
-                    config={{
-                      premium: { label: "Premium", color: "#22c55e" },
-                      gradeA: { label: "Grade A", color: "#3b82f6" },
-                      gradeB: { label: "Grade B", color: "#eab308" },
-                      gradeC: { label: "Grade C", color: "#f97316" },
-                    }}
-                    className="h-[300px]"
-                  >
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={monthlyTrends}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="month" />
-                        <YAxis />
-                        <ChartTooltip content={<ChartTooltipContent />} />
-                        <Legend />
-                        <Line type="monotone" dataKey="premium" stroke="#22c55e" strokeWidth={2} name="Premium %" />
-                        <Line type="monotone" dataKey="gradeA" stroke="#3b82f6" strokeWidth={2} name="Grade A %" />
-                        <Line type="monotone" dataKey="gradeB" stroke="#eab308" strokeWidth={2} name="Grade B %" />
-                        <Line type="monotone" dataKey="gradeC" stroke="#f97316" strokeWidth={2} name="Grade C %" />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </ChartContainer>
-                </CardContent>
-              </Card>
+            {monthlyTrends.length > 0 && (
+              <div className="grid lg:grid-cols-2 gap-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Quality Trends Over Time</CardTitle>
+                    <CardDescription>Monthly breakdown of grade distribution</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ChartContainer
+                      config={{
+                        premium: { label: "Premium", color: "#22c55e" },
+                        gradeA: { label: "Grade A", color: "#3b82f6" },
+                        gradeB: { label: "Grade B", color: "#eab308" },
+                        gradeC: { label: "Grade C", color: "#f97316" },
+                      }}
+                      className="h-[300px]"
+                    >
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={monthlyTrends}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="month" />
+                          <YAxis />
+                          <ChartTooltip content={<ChartTooltipContent />} />
+                          <Legend />
+                          <Line type="monotone" dataKey="premium" stroke="#22c55e" strokeWidth={2} name="Premium %" />
+                          <Line type="monotone" dataKey="gradeA" stroke="#3b82f6" strokeWidth={2} name="Grade A %" />
+                          <Line type="monotone" dataKey="gradeB" stroke="#eab308" strokeWidth={2} name="Grade B %" />
+                          <Line type="monotone" dataKey="gradeC" stroke="#f97316" strokeWidth={2} name="Grade C %" />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </ChartContainer>
+                  </CardContent>
+                </Card>
 
-              {/* Quality Distribution Pie Chart */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Current Quality Distribution</CardTitle>
-                  <CardDescription>Breakdown of your Arecanut grades this month</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ChartContainer
-                    config={{
-                      premium: { label: "Premium", color: "#22c55e" },
-                      gradeA: { label: "Grade A", color: "#3b82f6" },
-                      gradeB: { label: "Grade B", color: "#eab308" },
-                      gradeC: { label: "Grade C", color: "#f97316" },
-                    }}
-                    className="h-[300px]"
-                  >
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={qualityDistribution}
-                          cx="50%"
-                          cy="50%"
-                          labelLine={false}
-                          label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                          outerRadius={80}
-                          fill="#8884d8"
-                          dataKey="value"
-                        >
-                          {qualityDistribution.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} />
-                          ))}
-                        </Pie>
-                        <ChartTooltip content={<ChartTooltipContent />} />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </ChartContainer>
-                </CardContent>
-              </Card>
-            </div>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Current Quality Distribution</CardTitle>
+                    <CardDescription>Breakdown of your Arecanut grades</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ChartContainer
+                      config={{
+                        premium: { label: "Premium", color: "#22c55e" },
+                        gradeA: { label: "Grade A", color: "#3b82f6" },
+                        gradeB: { label: "Grade B", color: "#eab308" },
+                        gradeC: { label: "Grade C", color: "#f97316" },
+                      }}
+                      className="h-[300px]"
+                    >
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={qualityDistribution}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={false}
+                            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                            outerRadius={80}
+                            fill="#8884d8"
+                            dataKey="value"
+                          >
+                            {qualityDistribution.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.color} />
+                            ))}
+                          </Pie>
+                          <ChartTooltip content={<ChartTooltipContent />} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </ChartContainer>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
 
-            {/* Charts Row 2 */}
             <div className="grid lg:grid-cols-2 gap-6">
-              {/* Price Comparison */}
               <Card>
                 <CardHeader>
-                  <CardTitle>Price Performance vs Market</CardTitle>
-                  <CardDescription>How your prices compare to market averages</CardDescription>
+                  <CardTitle>Price Performance</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
@@ -965,7 +931,6 @@ export default function DashboardContent() {
                             <ArrowUpRight className="w-3 h-3 text-green-600" />
                             <span className="text-sm font-semibold text-green-600">+₹{item.difference}</span>
                           </div>
-                          <p className="text-xs text-muted-foreground">above market</p>
                         </div>
                       </div>
                     ))}
@@ -973,11 +938,9 @@ export default function DashboardContent() {
                 </CardContent>
               </Card>
 
-              {/* Defect Analysis */}
               <Card>
                 <CardHeader>
-                  <CardTitle>Common Defects Analysis</CardTitle>
-                  <CardDescription>Most frequent quality issues detected</CardDescription>
+                  <CardTitle>Common Defects</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
@@ -985,10 +948,7 @@ export default function DashboardContent() {
                       <div key={index} className="space-y-2">
                         <div className="flex items-center justify-between">
                           <span className="text-sm font-medium text-foreground">{defect.defect}</span>
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm text-muted-foreground">{defect.count} cases</span>
-                            <span className="text-sm font-semibold text-foreground">{defect.percentage}%</span>
-                          </div>
+                          <span className="text-sm font-semibold text-foreground">{defect.percentage}%</span>
                         </div>
                         <Progress value={defect.percentage} className="h-2" />
                       </div>
@@ -997,32 +957,6 @@ export default function DashboardContent() {
                 </CardContent>
               </Card>
             </div>
-
-            {/* Price Trends Chart */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Average Price Trends</CardTitle>
-                <CardDescription>Monthly average pricing across all grades</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ChartContainer
-                  config={{
-                    avgPrice: { label: "Average Price", color: "#22c55e" },
-                  }}
-                  className="h-[200px]"
-                >
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={monthlyTrends}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="month" />
-                      <YAxis />
-                      <ChartTooltip content={<ChartTooltipContent />} />
-                      <Bar dataKey="avgPrice" fill="#22c55e" name="Avg Price (₹/kg)" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </ChartContainer>
-              </CardContent>
-            </Card>
           </TabsContent>
         </Tabs>
       </div>
@@ -1030,3 +964,10 @@ export default function DashboardContent() {
   )
 }
 
+export default function Dashboard() {
+  return (
+    <AuthGuard>
+      <DashboardContent />
+    </AuthGuard>
+  )
+}
