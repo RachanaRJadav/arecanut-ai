@@ -10,16 +10,36 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Upload, Camera, BarChart3, History, CheckCircle, TrendingUp, Download, Eye, LogOut, Calendar, Filter, ArrowUpRight, X, Plus, Trash2, Star, Lightbulb, Target, Zap, Users, Bell, Settings, RefreshCw } from 'lucide-react'
+import {
+  Upload,
+  Camera,
+  BarChart3,
+  History,
+  CheckCircle,
+  TrendingUp,
+  Download,
+  Eye,
+  LogOut,
+  ArrowUpRight,
+  X,
+  Plus,
+  Trash2,
+  Star,
+  Lightbulb,
+  Target,
+  Zap,
+  Users,
+  Bell,
+  Settings,
+  RefreshCw,
+} from "lucide-react"
 import Link from "next/link"
 import { AuthGuard } from "@/components/ui/auth-guard"
-import { useRouter } from 'next/navigation'
+import { useRouter } from "next/navigation"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import {
   LineChart,
   Line,
-  BarChart,
-  Bar,
   PieChart,
   Pie,
   Cell,
@@ -65,50 +85,65 @@ function DashboardContent() {
   const [showCamera, setShowCamera] = useState(false)
   const [location, setLocation] = useState("")
   const [notes, setNotes] = useState("")
-  const [userId, setUserId] = useState<string>("")
+  const [userId, setUserId] = useState<string | null>(null)
   const [analytics, setAnalytics] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>("")
+  const [recentResults, setRecentResults] = useState<GradingResult[]>([])
+  const [fetchingData, setFetchingData] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const router = useRouter()
 
   useEffect(() => {
-    const storedUserId = localStorage.getItem("userId")
-    if (storedUserId) {
-      setUserId(storedUserId)
-      fetchAnalytics(storedUserId)
+    const initializeUser = async () => {
+      try {
+        const storedUserId = localStorage.getItem("userId")
+        console.log("[v0] Stored userId:", storedUserId)
+        if (storedUserId) {
+          setUserId(storedUserId)
+          await Promise.all([fetchAnalytics(storedUserId), fetchRecentGradings(storedUserId)])
+        } else {
+          console.log("[v0] No userId found, redirecting to login")
+          router.push("/login")
+        }
+      } catch (err) {
+        console.error("[v0] Initialization error:", err)
+      } finally {
+        setLoading(false)
+      }
     }
-    setLoading(false)
-  }, [])
+    initializeUser()
+  }, [router])
 
   const fetchAnalytics = async (uid: string) => {
     try {
+      console.log("[v0] Fetching analytics for userId:", uid)
+      setFetchingData(true)
       const response = await fetch(`/api/grading/analytics?userId=${uid}`)
       const data = await response.json()
+      console.log("[v0] Analytics response:", data)
       if (data.success) {
         setAnalytics(data.analytics)
+      } else {
+        console.log("[v0] Analytics not successful:", data)
       }
     } catch (error) {
       console.error("[v0] Error fetching analytics:", error)
+    } finally {
+      setFetchingData(false)
     }
   }
 
-  const [recentResults, setRecentResults] = useState<GradingResult[]>([])
-
-  useEffect(() => {
-    if (userId) {
-      fetchRecentGradings(userId)
-    }
-  }, [userId])
-
   const fetchRecentGradings = async (uid: string) => {
     try {
+      console.log("[v0] Fetching recent gradings for userId:", uid)
       const response = await fetch(`/api/grading/history?userId=${uid}&limit=10`)
       const data = await response.json()
+      console.log("[v0] History response:", data)
       if (data.success) {
-        setRecentResults(data.history)
+        setRecentResults(data.history || [])
       }
     } catch (error) {
       console.error("[v0] Error fetching recent results:", error)
@@ -170,27 +205,38 @@ function DashboardContent() {
   }
 
   const handleAnalyze = async () => {
-    if (selectedImages.length === 0 || !userId) return
+    setError("")
+
+    console.log("[v0] handleAnalyze called, selectedImages:", selectedImages.length, "userId:", userId)
+
+    if (selectedImages.length === 0 || !userId) {
+      console.log("[v0] Validation failed - selectedImages:", selectedImages.length, "userId:", userId)
+      setError("Please select at least one image")
+      return
+    }
 
     setIsAnalyzing(true)
     setAnalysisProgress(0)
     setCurrentResults([])
-    setError("")
 
     const batchId = `BATCH-${Date.now()}`
 
     try {
       const formData = new FormData()
-      selectedImages.forEach((file) => formData.append("files", file))
+      selectedImages.forEach((file) => {
+        console.log("[v0] Adding file to FormData:", file.name, file.type)
+        formData.append("files", file)
+      })
       formData.append("userId", userId)
       formData.append("batchId", batchId)
       formData.append("location", location)
       formData.append("notes", notes)
 
-      // Simulate progress
       const progressInterval = setInterval(() => {
         setAnalysisProgress((prev) => Math.min(prev + 15, 90))
       }, 300)
+
+      console.log("[v0] Starting analyze request with", selectedImages.length, "images")
 
       const response = await fetch("/api/grading/analyze", {
         method: "POST",
@@ -199,9 +245,22 @@ function DashboardContent() {
 
       clearInterval(progressInterval)
 
-      const data = await response.json()
+      console.log("[v0] Response status:", response.status)
 
-      if (data.success) {
+      const data = await response.json()
+      console.log("[v0] Response data:", data)
+
+      if (!response.ok) {
+        const errorMsg = data.message || data.error || `Server error: ${response.status}`
+        console.log("[v0] API Error:", errorMsg)
+        setError(errorMsg)
+        setIsAnalyzing(false)
+        setAnalysisProgress(0)
+        return
+      }
+
+      if (data.success && data.results) {
+        console.log("[v0] Analysis successful, results:", data.results.length)
         setCurrentResults(data.results)
         setAnalysisProgress(100)
 
@@ -217,16 +276,30 @@ function DashboardContent() {
         setSelectedImages([])
         setLocation("")
         setNotes("")
-        fetchAnalytics(userId)
-        fetchRecentGradings(userId)
+
+        setTimeout(() => {
+          if (userId) {
+            console.log("[v0] Refreshing analytics after successful analysis")
+            fetchAnalytics(userId)
+            fetchRecentGradings(userId)
+          }
+        }, 500)
+
+        setAnalysisProgress(0)
+        setTimeout(() => setIsAnalyzing(false), 1000)
       } else {
-        setError(data.message || "Analysis failed. Please try again.")
+        const errorMsg = data.message || "Analysis failed. Please try again."
+        console.log("[v0] Analysis not successful:", errorMsg)
+        setError(errorMsg)
+        setIsAnalyzing(false)
+        setAnalysisProgress(0)
       }
-    } catch (error) {
-      console.error("[v0] Analysis error:", error)
-      setError("Error analyzing images. Please check your network connection.")
-    } finally {
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : "Network error. Please try again."
+      console.log("[v0] Catch error:", errorMsg)
+      setError(errorMsg)
       setIsAnalyzing(false)
+      setAnalysisProgress(0)
     }
   }
 
@@ -314,7 +387,11 @@ function DashboardContent() {
     }))
 
     const header = Object.keys(data[0]).join(",")
-    const rows = data.map((row) => Object.values(row).map(v => `"${v}"`).join(","))
+    const rows = data.map((row) =>
+      Object.values(row)
+        .map((v) => `"${v}"`)
+        .join(","),
+    )
     const csvContent = [header, ...rows].join("\n")
 
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
